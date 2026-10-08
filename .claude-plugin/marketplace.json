@@ -1,0 +1,26 @@
+{
+  "name": "pawelgerr",
+  "owner": {
+    "name": "Pawel Gerr",
+    "url": "https://github.com/PawelGerr"
+  },
+  "metadata": {
+    "description": "Agent skills for Thinktecture.Runtime.Extensions and Thinktecture.EntityFrameworkCore."
+  },
+  "plugins": [
+    {
+      "name": "thinktecture-runtime-extensions",
+      "displayName": "Thinktecture.Runtime.Extensions",
+      "source": "./skills/thinktecture-runtime-extensions",
+      "description": "Design and implement Smart Enums, Value Objects, Discriminated Unions, and Object Factories with Thinktecture.Runtime.Extensions.",
+      "author": {
+        "name": "Pawel Gerr",
+        "url": "https://github.com/PawelGerr"
+      },
+      "homepage": "https://github.com/PawelGerr/Thinktecture.Runtime.Extensions",
+      "repository": "https://github.com/PawelGerr/Thinktecture.Runtime.Extensions",
+      "license": "BSD-3-Clause",
+      "keywords": ["dotnet", "csharp", "smart-enum", "value-object", "discriminated-union", "source-generator"]
+    }
+  ]
+}
