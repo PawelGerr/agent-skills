@@ -7,6 +7,7 @@ This repository contains only skills for the libraries Thinktecture.Runtime.Exte
 | Skill | Library |
 |-------|---------|
 | `thinktecture-runtime-extensions` | [Thinktecture.Runtime.Extensions](https://github.com/PawelGerr/Thinktecture.Runtime.Extensions) |
+| `thinktecture-entityframeworkcore` | [Thinktecture.EntityFrameworkCore](https://github.com/PawelGerr/Thinktecture.EntityFrameworkCore) |
 
 ## Install with the `skills` CLI
 

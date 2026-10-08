@@ -21,6 +21,20 @@
       "repository": "https://github.com/PawelGerr/Thinktecture.Runtime.Extensions",
       "license": "BSD-3-Clause",
       "keywords": ["dotnet", "csharp", "smart-enum", "value-object", "discriminated-union", "source-generator"]
+    },
+    {
+      "name": "thinktecture-entityframeworkcore",
+      "displayName": "Thinktecture.EntityFrameworkCore",
+      "source": "./skills/thinktecture-entityframeworkcore",
+      "description": "Use bulk operations, temp tables, collection parameters, window functions, table hints, nested transactions, and other Thinktecture.EntityFrameworkCore features on SQL Server, PostgreSQL, and SQLite.",
+      "author": {
+        "name": "Pawel Gerr",
+        "url": "https://github.com/PawelGerr"
+      },
+      "homepage": "https://github.com/PawelGerr/Thinktecture.EntityFrameworkCore",
+      "repository": "https://github.com/PawelGerr/Thinktecture.EntityFrameworkCore",
+      "license": "BSD-3-Clause",
+      "keywords": ["dotnet", "csharp", "entity-framework-core", "bulk-operations", "temp-tables", "window-functions", "sql-server", "postgresql", "sqlite"]
     }
   ]
 }
