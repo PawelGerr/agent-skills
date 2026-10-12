@@ -42,12 +42,12 @@ InsertPropertyBuilder<TTarget, TSource> Map<TProp>(
 ```
 
 Options (`SqlServerBulkInsertFromQueryOptions` / `NpgsqlBulkInsertFromQueryOptions` /
-`SqliteBulkInsertFromQueryOptions`) expose only target-table overrides:
+`SqliteBulkInsertFromQueryOptions`) expose only the target-table override:
 
 | Property | Purpose |
 |----------|---------|
-| `string? TableName` | Override the target table name (else from the model) |
-| `string? Schema` | Override the target schema (else from the model) |
+| `IBulkOperationTableNameProvider TableNameProvider` | Override the target table (defaults to `IBulkOperationTableNameProvider.Default`, i.e. the model table). Called for the target entity type only. `ForRootEntity(tableName, schema)`; a `null` schema means the database default, not the model schema |
+| `string? TableName` / `string? Schema` | `[Obsolete]`: a `null` part keeps the model value; setting them replaces `TableNameProvider`, setting `TableNameProvider` clears them; the last assignment wins |
 
 ## Examples
 
@@ -117,7 +117,7 @@ await ctx.Set<Product>().BulkInsertAsync(
 await ctx.Set<Product>().BulkInsertAsync(
    sourceQuery,
    b => b.Map(t => t.Id, s => s.Id).Map(t => t.Name, s => s.Name),
-   new SqlServerBulkInsertFromQueryOptions { Schema = "archive", TableName = "ArchivedProducts" });
+   new SqlServerBulkInsertFromQueryOptions { TableNameProvider = IBulkOperationTableNameProvider.ForRootEntity("ArchivedProducts", "archive") });
    // PostgreSQL: new NpgsqlBulkInsertFromQueryOptions { ... }
    // SQLite:     new SqliteBulkInsertFromQueryOptions { ... }
 ```

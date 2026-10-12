@@ -49,12 +49,12 @@ SetPropertyBuilder<TTarget, TSource> Set<TProp>(
 ```
 
 Options (`SqlServerBulkUpdateFromQueryOptions` / `NpgsqlBulkUpdateFromQueryOptions` /
-`SqliteBulkUpdateFromQueryOptions`) expose only target-table overrides:
+`SqliteBulkUpdateFromQueryOptions`) expose only the target-table override:
 
 | Property | Purpose |
 |----------|---------|
-| `string? TableName` | Override the target table name (else from the model) |
-| `string? Schema` | Override the target schema (else from the model) |
+| `IBulkOperationTableNameProvider TableNameProvider` | Override the target table (defaults to `IBulkOperationTableNameProvider.Default`, i.e. the model table). Called for the target entity type only. `ForRootEntity(tableName, schema)`; a `null` schema means the database default, not the model schema |
+| `string? TableName` / `string? Schema` | `[Obsolete]`: a `null` part keeps the model value; setting them replaces `TableNameProvider`, setting `TableNameProvider` clears them; the last assignment wins |
 
 ## Examples
 
@@ -167,7 +167,7 @@ await ctx.Set<Product>().BulkUpdateAsync(
 await ctx.Set<Product>().BulkUpdateAsync(
    sourceQuery, e => e.Id, f => f.Id,
    b => b.Set(e => e.Name, (e, f) => f.Name),
-   options: new SqlServerBulkUpdateFromQueryOptions { Schema = "dbo", TableName = "Products_Staging" });
+   options: new SqlServerBulkUpdateFromQueryOptions { TableNameProvider = IBulkOperationTableNameProvider.ForRootEntity("Products_Staging", "dbo") });
    // PostgreSQL: new NpgsqlBulkUpdateFromQueryOptions { ... }
    // SQLite:     new SqliteBulkUpdateFromQueryOptions { ... }
 ```

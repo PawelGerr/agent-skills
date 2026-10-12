@@ -4,8 +4,8 @@ Insert rows that don't exist yet and update the ones that do, in one operation.
 The in-memory collection is pushed into a temp table and merged into the target:
 **SQL Server** uses a `MERGE`, **PostgreSQL** uses `INSERT … ON CONFLICT … DO
 UPDATE`, **SQLite** uses batched `INSERT`/`UPDATE` statements. Returns the number
-of affected rows (inserted + updated). (Owned entity types are **not**
-supported — see the notes below.)
+of affected rows (inserted + updated). (Owned entity types: only inlined
+ones, and only on SQLite — see the notes below.)
 
 > This page is for upserting a collection you already hold in memory
 > (`List<T>`, array, …). For a pure insert use `Bulk-Insert.md`; for a pure
@@ -44,7 +44,7 @@ Task<int> BulkInsertOrUpdateAsync<T>(
 
 Only the **options type** differs per provider (all implement
 `IBulkInsertOrUpdateOptions`, which exposes `PropertiesToInsert`,
-`PropertiesToUpdate`, `KeyProperties`, `TableName`, `Schema`):
+`PropertiesToUpdate`, `KeyProperties`, `TableNameProvider`, obsolete `TableName`/`Schema`):
 
 | Provider | Options type | Notable extra properties |
 |----------|--------------|--------------------------|
@@ -134,10 +134,14 @@ await ctx.BulkInsertOrUpdateAsync(products, new NpgsqlBulkInsertOrUpdateOptions
 ```csharp
 await ctx.BulkInsertOrUpdateAsync(products, new SqlServerBulkInsertOrUpdateOptions
 {
-   Schema = "archive",
-   TableName = "ArchivedProducts",
+   TableNameProvider = IBulkOperationTableNameProvider.ForRootEntity("ArchivedProducts", "archive"),
 });
 ```
+
+Bulk upsert writes the **root** table only (owned types in separate tables are not
+supported, see the notes below), so `ForRootEntity` covers the table override.
+`IBulkOperationTableNameProvider.Create(getTableName)` and a custom
+`IBulkOperationTableNameProvider` work as well; they are called for the root entity type.
 
 ## Notes & pitfalls
 
@@ -155,10 +159,30 @@ await ctx.BulkInsertOrUpdateAsync(products, new SqlServerBulkInsertOrUpdateOptio
   table), PostgreSQL `INSERT … ON CONFLICT … DO UPDATE`, SQLite batched
   `INSERT`/`UPDATE`. The return value is the total affected rows (inserted +
   updated).
-- Table/schema override only changes the **target** table; column names are still
+- The table override only changes the **target** table; column names are still
   resolved from the EF Core model.
-- **Owned entity types are not supported.** Entities with shadow properties must
-  be attached to the `DbContext` so the values can be read.
+- Override tables via `TableNameProvider` (`IBulkOperationTableNameProvider.GetTableName(IEntityType)`
+  returning `BulkOperationTableName(Name, Schema)`). Built-in: `IBulkOperationTableNameProvider.Default`
+  (model tables, the default of `TableNameProvider`), `ForRootEntity(tableName, schema)`
+  (root only; throws when the operation reaches an owned type in a separate table) and
+  `Create(getTableName)` (calls the delegate for every entity type).
+  A `null` schema means the database default, not the model schema.
+- `TableName`/`Schema` are `[Obsolete]` (CS0618): root table only, a `null` part keeps the
+  model value, throw when the operation reaches an owned type in a separate table. Setting
+  `TableName`/`Schema` replaces `TableNameProvider`, setting `TableNameProvider` clears
+  them, and the last assignment wins. Migrating `TableName = "X"` to `ForRootEntity("X")`
+  removes the model schema; pass the schema explicitly. No transaction is added by the
+  library; atomicity is the responsibility of the caller's transaction.
+- **Owned entity types** (verified by tests per provider):
+  - SQL Server / PostgreSQL: not supported for any owned kind (inlined, separate
+    `OwnsOne`, `OwnsMany`). Throws `NotSupportedException` ("Temp tables don't support
+    owned entities.") before the target table is written.
+  - SQLite: inlined `OwnsOne` works. Separate `OwnsOne` and `OwnsMany` throw
+    `NotSupportedException` ("The owned type property '…' is selected for bulk-insert-or-update but
+    there are no properties for performing the update.") before the target table is
+    written.
+  Entities with shadow properties must be attached to the `DbContext` so the values
+  can be read.
   **Workaround:** bulk **insert** supports owned types, so for an upsert split the
   work — `BulkInsertAsync` the new rows and update existing rows' owned columns via
   EF Core's native `ExecuteUpdateAsync` — or restructure the owned type into scalar
