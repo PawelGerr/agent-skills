@@ -173,7 +173,7 @@ the metadata-priority note in `object-factories.md`).
 
 ## Serilog
 
-Package: `Thinktecture.Runtime.Extensions.Serilog` (requires Serilog `>= 4.0.0`). Register once at startup:
+Package: `Thinktecture.Runtime.Extensions.Serilog` (requires Serilog `>= 4.0.2`). Register once at startup:
 
 ```csharp
 using Thinktecture;
