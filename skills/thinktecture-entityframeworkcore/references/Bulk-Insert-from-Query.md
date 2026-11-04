@@ -100,16 +100,78 @@ await ctx.Set<Product>().BulkInsertAsync(
       .Map(t => t.Name,  s => s.Name!.ToUpper())          // server function
       .Map(t => t.Count, s => s.Count * 2 + 1)            // arithmetic on source
       .Map(t => t.Note,  s => myCapturedVariable)         // captured variable → parameter
-      .Map(t => t.Status, s => ProductStatus.Published)   // constant / static member
+      .Map(t => t.Status, s => ProductStatus.Published)   // static member → parameter
       .Map(t => EF.Property<int>(t, "_privateField"),
            s => EF.Property<int>(s, "_privateField")));   // shadow / backing field
 ```
 
 - Simple property access and `EF.Property<T>(...)` map to source columns.
-- Constants, captured variables and static members (e.g. smart-enum values) are
-  emitted as SQL parameters (`@__bv_N`).
-- Arithmetic / method-call expressions are translated to SQL
-  (`@__ev_N` for any embedded constant values).
+- A value selector that is a single constant, captured variable or static member
+  (e.g. a smart-enum value) is bound as a SQL parameter (`__insert_const_N`); a
+  value converter of the target column is applied.
+- A constant inside a larger expression is rendered as a SQL literal.
+- Arithmetic / method-call expressions are translated to SQL by EF Core.
+
+### Complex types (since 10.6.0)
+
+The target selector can go through complex properties (`ComplexProperty`, class or
+struct, nested allowed), or it can name a whole complex property:
+
+```csharp
+await ctx.Set<Message>().BulkInsertAsync(
+   tempTable.Query,
+   b => b
+      .Map(t => t.Id, s => s.Id)
+      .Map(t => t.MessageTimestamp, s => s.MessageTimestamp)
+      .Map(t => t.EffectiveMessage, s => s.EffectiveMessage)); // whole complex property
+
+// single member instead: .Map(t => t.EffectiveMessage.ReceivedAt, s => s.EffectiveMessage.ReceivedAt)
+```
+
+- A whole complex property expands into one column per member, recursively for
+  nested complex types.
+- The value of a whole complex property is the source complex property or a
+  captured variable. A `new` expression is not evaluated on the client; assign it
+  to a variable first.
+- Members with a value converter work; a captured value is converted with the
+  converter of the target column.
+- A whole complex property skips members whose value the database generates
+  (`GetBeforeSaveBehavior() == Ignore`, e.g. computed columns); map such a member
+  explicitly to write it. When every writable member of a whole complex property
+  is generated: `ArgumentException` "No column can be written, because every
+  member of the selected complex properties is generated
+  (PropertySaveBehavior.Ignore). Expression: <that selector>", also when other
+  `Map` entries exist.
+- `NotSupportedException`:
+  - complex collection ("The complex collection '…' is not supported.");
+  - nullable complex property as a whole ("The nullable complex property '…'
+    cannot be set as a whole."); a member through a nullable complex property,
+    class or struct (`t => t.OptionalBoundary!.Upper`,
+    `t => t.Boundary.Value.Upper`), throws "The member '…' of '…' is a
+    nullable complex property.";
+  - target selector through a member that is not a complex property, e.g. a
+    navigation ("The member '…' is not a complex property of '…'");
+  - target selector that is not a member chain on the lambda parameter, e.g.
+    `t => t.Count + 1` ("Only simple property access expressions (e => e.Property),
+    member access through complex properties (e => e.ComplexProperty.Property) or
+    EF.Property calls on the lambda parameter are supported.");
+  - `EF.Property` not on the lambda parameter, e.g.
+    `EF.Property<long>(t.EffectiveMessage, "ReceivedAt")` ("EF.Property is
+    supported only on the lambda parameter, not through a complex property, a
+    navigation or another expression."); use member access instead.
+- `InvalidOperationException` "The property '…' is not a mapped property on '…'."
+  for an unmapped member; for a complex member it names the complex type.
+- `ArgumentException`:
+  - captured `null` as the value of a whole complex property, or any member access
+    on a captured `null`: "The member '…' of '…' cannot be read because the
+    captured value is null."; pass a non-null value or map the members one by one.
+    Captured values are evaluated member by member, so `captured.HasValue` on a
+    `null` `int?` and `captured == null ? 0 : captured.Count` throw as well; check
+    for `null` before the call.
+  - same target column mapped twice, also a whole complex property plus one of its
+    members ("The target column '…' is mapped more than once."), on all providers.
+- Nested complex types need settable or `init` members, because EF Core cannot
+  bind a nested complex type to a constructor parameter.
 
 ### Override the target table
 

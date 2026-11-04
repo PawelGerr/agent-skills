@@ -154,6 +154,11 @@ await using var temp = await ctx.BulkInsertIntoTempTableAsync(rows,
 
 ## Notes & pitfalls
 
+- Complex types (`ComplexProperty`, class or struct, nested allowed) in the row
+  type are flattened into one column per member, with the configured column names
+  (EF Core default `Complex_Member`, or `HasColumnName`). `.Query` reads them back.
+  On SQL Server and PostgreSQL a string member honors `UseCollation`.
+
 - **Always `await using`** the returned reference/query — otherwise the temp
   table is not dropped, and (with `DropTableOnDispose = false`) name suffixes
   accumulate.

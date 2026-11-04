@@ -132,7 +132,7 @@ await ctx.Set<Product>().BulkUpdateAsync(
    builder => builder
       .Set(e => e.Name,   (e, f) => f.Name)                  // source property
       .Set(e => e.Count,  (e, f) => e.Count + f.Count * 2)   // arithmetic over target & source
-      .Set(e => e.Total,  (e, f) => 42)                      // constant → parameter
+      .Set(e => e.Total,  (e, f) => 42)                      // constant → SQL literal
       .Set(e => e.Note,   (e, f) => myCapturedVariable)      // captured variable
       .Set(e => e.Status, (e, f) => ProductStatus.Published) // static member / smart-enum
       .Set(e => EF.Property<int>(e, "_privateField"),
@@ -140,10 +140,79 @@ await ctx.Set<Product>().BulkUpdateAsync(
 ```
 
 - Simple property access and `EF.Property<T>(...)` map to columns.
-- Constants, captured variables and static members are emitted as SQL parameters
-  (`@__bv_N`); value-converter-typed values (e.g. smart enums) are handled too.
-- Arithmetic / method-call expressions are translated to SQL (`@__ev_N` for any
-  embedded constant values).
+- Constants, captured variables and static members are evaluated once and
+  rendered as SQL literals with the type mapping of the target column, so a value
+  converter (e.g. smart enums) is applied.
+- Arithmetic / method-call expressions are translated to SQL by EF Core.
+- The only SQL parameters of the `UPDATE` come from the source query.
+
+### Complex types (since 10.6.0)
+
+The target selector can go through complex properties (`ComplexProperty`, class or
+struct, nested allowed), or it can name a whole complex property:
+
+```csharp
+await ctx.Set<Message>().BulkUpdateAsync(
+   tempTable.Query,
+   e => new { e.Id, e.MessageTimestamp },
+   f => new { f.Id, f.MessageTimestamp },
+   b => b.Set(e => e.EffectiveMessage.ReceivedAt, (e, f) => f.EffectiveMessage.ReceivedAt)); // single member
+
+// whole complex property, value from the source
+b => b.Set(e => e.EffectiveMessage, (e, f) => f.EffectiveMessage)
+
+// whole complex property, value from a captured variable
+var effectiveMessage = new TimestampPair(7, 8);
+b => b.Set(e => e.EffectiveMessage, (e, f) => effectiveMessage)
+```
+
+- A whole complex property expands into one `SET` assignment per member column,
+  recursively for nested complex types.
+- The value of a whole complex property is the source complex property or a
+  captured variable. A `new` expression is not evaluated on the client; assign it
+  to a variable first.
+- Members with a value converter work; a captured value is converted with the
+  converter of the target column.
+- A whole complex property skips members whose value the database generates
+  (`GetBeforeSaveBehavior() == Ignore`, e.g. computed columns); set such a member
+  explicitly to write it. When every writable member of a whole complex property
+  is generated: `ArgumentException` "No column can be written, because every
+  member of the selected complex properties is generated
+  (PropertySaveBehavior.Ignore). Expression: <that selector>", also when other
+  `Set` entries exist.
+- `NotSupportedException`:
+  - complex collection ("The complex collection '…' is not supported.");
+  - nullable complex property as a whole ("The nullable complex property '…'
+    cannot be set as a whole."); a member through a nullable complex property,
+    class or struct (`e => e.OptionalBoundary!.Upper`,
+    `e => e.Boundary.Value.Upper`), throws "The member '…' of '…' is a
+    nullable complex property.";
+  - value of a nullable type (e.g. a captured `TimestampPair?`) for a whole
+    complex property ("The value of the whole complex property must not be of
+    the nullable type '…'.");
+  - target selector through a member that is not a complex property, e.g. a
+    navigation ("The member '…' is not a complex property of '…'");
+  - target selector that is not a member chain on the lambda parameter, e.g.
+    `e => e.Count + 1` ("Only simple property access expressions (e => e.Property),
+    member access through complex properties (e => e.ComplexProperty.Property) or
+    EF.Property calls on the lambda parameter are supported.");
+  - `EF.Property` not on the lambda parameter, e.g.
+    `EF.Property<long>(e.EffectiveMessage, "ReceivedAt")` ("EF.Property is
+    supported only on the lambda parameter, not through a complex property, a
+    navigation or another expression."); use member access instead.
+- `InvalidOperationException` "The property '…' is not a mapped property on '…'."
+  for an unmapped member; for a complex member it names the complex type.
+- `ArgumentException`:
+  - captured `null` as the value of a whole complex property, or any member access
+    on a captured `null` (also in `filter`): "The member '…' of '…' cannot be read
+    because the captured value is null."; pass a non-null value or set the members
+    one by one. Captured values are evaluated member by member, so
+    `captured.HasValue` on a `null` `int?` and `captured == null ? 0 : captured.Count`
+    throw as well; check for `null` before the call.
+  - same target column set twice, also a whole complex property plus one of its
+    members ("The target column '…' is set more than once."), on all providers.
+- Nested complex types need settable or `init` members, because EF Core cannot
+  bind a nested complex type to a constructor parameter.
 
 ### Source can be a temp table
 
@@ -184,8 +253,7 @@ await ctx.Set<Product>().BulkUpdateAsync(
 - **When to use this vs alternatives:** join another query / composite-key join →
   this API; single-table simple `Where` → EF Core native `ExecuteUpdateAsync`;
   a collection in memory → `Bulk-Update.md`.
-- The `filter` and the `Set` value expressions share the same translator, so
-  parameters across both are unified (`@__ev_N`).
+- The `filter` and the `Set` value expressions share the same translator.
 - SQL Server emits `UPDATE t SET … FROM target INNER JOIN (subquery) AS s ON …`;
   PostgreSQL/SQLite emit `UPDATE target AS t SET … FROM (subquery) AS s WHERE …`.
 - Returns `Task<int>` — the number of updated rows (`0` if the filter excludes
