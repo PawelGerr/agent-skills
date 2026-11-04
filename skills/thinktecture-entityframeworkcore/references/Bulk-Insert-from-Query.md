@@ -46,8 +46,8 @@ Options (`SqlServerBulkInsertFromQueryOptions` / `NpgsqlBulkInsertFromQueryOptio
 
 | Property | Purpose |
 |----------|---------|
-| `IBulkOperationTableNameProvider TableNameProvider` | Override the target table (defaults to `IBulkOperationTableNameProvider.Default`, i.e. the model table). Called for the target entity type only. `ForRootEntity(tableName, schema)`; a `null` schema means the database default, not the model schema |
-| `string? TableName` / `string? Schema` | `[Obsolete]`: a `null` part keeps the model value; setting them replaces `TableNameProvider`, setting `TableNameProvider` clears them; the last assignment wins |
+| `IBulkOperationTableNameProvider TableNameProvider` | Override the target table (defaults to `IBulkOperationTableNameProvider.Default`, i.e. the model table). Called for the target entity type only. `ForRootEntity(tableName, schema)`, `ForRootEntityWithDefaultSchema(tableName)` (model schema) or `ForRootEntityWithDefaultName(schema)` (model table name); a `null` schema means the database default, not the model schema |
+| `string? TableName` / `string? Schema` | `[Obsolete]`: a `null` part keeps the model value; setting them replaces `TableNameProvider`, setting `TableNameProvider` clears them; the last assignment wins. Replace `TableName = "X"` by `ForRootEntityWithDefaultSchema("X")`, `Schema = "s"` by `ForRootEntityWithDefaultName("s")` and both by `ForRootEntity("X", "s")` |
 
 ## Examples
 

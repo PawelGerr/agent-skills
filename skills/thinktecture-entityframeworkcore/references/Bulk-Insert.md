@@ -138,15 +138,22 @@ await ctx.BulkInsertAsync(products, new SqlServerBulkInsertOptions { TableNamePr
 - Override tables via `TableNameProvider` (`IBulkOperationTableNameProvider.GetTableName(IEntityType)`
   returning `BulkOperationTableName(Name, Schema)`). Built-in: `IBulkOperationTableNameProvider.Default`
   (model tables, the default of `TableNameProvider`), `ForRootEntity(tableName, schema)`
-  (root only; throws when the operation reaches an owned type in a separate table) and
-  `Create(getTableName)` (calls the delegate for every entity type).
+  (root only; throws when the operation reaches an owned type in a separate table),
+  `ForRootEntityWithDefaultSchema(tableName)` (root only; fixed name, model schema; throws for
+  temp table entities),
+  `ForRootEntityWithDefaultName(schema)` (root only; model name, fixed schema; throws for temp
+  table entities) and `Create(getTableName)` (calls the delegate for every entity type).
   A `null` schema means the database default, not the model schema.
 - `TableName`/`Schema` are `[Obsolete]` (CS0618): root table only, a `null` part keeps the
   model value, throw when the operation reaches an owned type in a separate table. Setting
   `TableName`/`Schema` replaces `TableNameProvider`, setting `TableNameProvider` clears
-  them, and the last assignment wins. Migrating `TableName = "X"` to `ForRootEntity("X")`
-  removes the model schema; pass the schema explicitly. No transaction is added by the
-  library; atomicity is the responsibility of the caller's transaction.
+  them, and the last assignment wins. Replace `TableName = "X"` by
+  `ForRootEntityWithDefaultSchema("X")`, `Schema = "s"` by `ForRootEntityWithDefaultName("s")`
+  and both by `ForRootEntity("X", "s")`; `ForRootEntity("X")` drops the model schema.
+  `TableName` alone on a temp table entity uses `entityType.GetSchema()`, but
+  `ForRootEntityWithDefaultSchema` throws for it; use `ForRootEntity(tableName, schema)` there.
+  No transaction is added by the library; atomicity is the responsibility of the caller's
+  transaction.
 - The collection overload is **`DbContext.BulkInsertAsync(collection)`**. The
   similarly-named **`DbSet<T>.BulkInsertAsync(IQueryable source, map)`** is a
   *different* feature (insert from query) — see `Bulk-Insert-from-Query.md`.
