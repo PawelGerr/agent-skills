@@ -140,9 +140,14 @@ await ctx.Set<Product>().BulkUpdateAsync(
 ```
 
 - Simple property access and `EF.Property<T>(...)` map to columns.
-- Constants, captured variables and static members are evaluated once and
-  rendered as SQL literals with the type mapping of the target column, so a value
-  converter (e.g. smart enums) is applied.
+- Every subtree without a lambda parameter (constants, captured variables, static
+  members, `captured == null ? 0 : captured.Count`, `captured.Name.Trim()`) is
+  evaluated once on the client as a whole (C# semantics) and rendered as a SQL
+  literal with the type mapping of the target column, so a value converter (e.g.
+  smart enums) is applied. Members EF Core translates server-side (`DateTime.Now`)
+  stay server-side. Any other client evaluation failure throws
+  `InvalidOperationException` ("The expression '…' cannot be evaluated on the
+  client: …") with the original exception as inner exception.
 - Arithmetic / method-call expressions are translated to SQL by EF Core.
 - The only SQL parameters of the `UPDATE` come from the source query.
 
@@ -168,9 +173,9 @@ b => b.Set(e => e.EffectiveMessage, (e, f) => effectiveMessage)
 
 - A whole complex property expands into one `SET` assignment per member column,
   recursively for nested complex types.
-- The value of a whole complex property is the source complex property or a
-  captured variable. A `new` expression is not evaluated on the client; assign it
-  to a variable first.
+- The value of a whole complex property is the source complex property, a
+  captured variable or a `new` expression without a lambda parameter (e.g.
+  `new BoundaryValueObject(7, 8)`), which is evaluated once on the client.
 - Members with a value converter work; a captured value is converted with the
   converter of the target column.
 - A whole complex property skips members whose value the database generates
@@ -206,9 +211,14 @@ b => b.Set(e => e.EffectiveMessage, (e, f) => effectiveMessage)
   - captured `null` as the value of a whole complex property, or any member access
     on a captured `null` (also in `filter`): "The member '…' of '…' cannot be read
     because the captured value is null."; pass a non-null value or set the members
-    one by one. Captured values are evaluated member by member, so
-    `captured.HasValue` on a `null` `int?` and `captured == null ? 0 : captured.Count`
-    throw as well; check for `null` before the call.
+    one by one. `n.Value` on a `null` `int?` throws it as well. A null guard
+    prevents it (`captured == null ? 0 : captured.Count`,
+    `nullableInt.HasValue ? 1 : 2`), also when the guarded part reads a column
+    (`captured == null || e.Name == captured.Name` updates all rows for a `null`
+    `captured`), because a conditional, `&&` or `||` whose test or left operand
+    has no lambda parameter is decided on the client. `EF.Functions` methods are
+    always translated to SQL; a captured `IQueryable` is never executed (the value
+    selector throws `InvalidOperationException`).
   - same target column set twice, also a whole complex property plus one of its
     members ("The target column '…' is set more than once."), on all providers.
 - Nested complex types need settable or `init` members, because EF Core cannot

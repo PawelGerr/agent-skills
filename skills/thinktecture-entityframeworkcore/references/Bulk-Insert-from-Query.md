@@ -106,10 +106,22 @@ await ctx.Set<Product>().BulkInsertAsync(
 ```
 
 - Simple property access and `EF.Property<T>(...)` map to source columns.
-- A value selector that is a single constant, captured variable or static member
-  (e.g. a smart-enum value) is bound as a SQL parameter (`__insert_const_N`); a
-  value converter of the target column is applied.
+- A value selector that is evaluated completely on the client (a constant, a
+  captured variable, a static member such as a smart-enum value,
+  `captured == null ? 0 : captured.Count`, a `new` expression) is bound as a SQL
+  parameter (`__insert_const_N`); a value converter of the target column is
+  applied.
 - A constant inside a larger expression is rendered as a SQL literal.
+- Every subtree without the lambda parameter (e.g.
+  `captured == null ? 0 : captured.Count`, `captured.Name.Trim()`) is evaluated
+  once on the client as a whole (C# semantics). Members EF Core translates
+  server-side (`DateTime.Now`) stay server-side. A conditional, `&&` or `||`
+  whose test or left operand has no lambda parameter is decided on the client,
+  and only the selected part is translated. `EF.Functions` methods are always
+  translated to SQL; a captured `IQueryable` is never executed (the value
+  selector throws `InvalidOperationException`). Any other client evaluation
+  failure throws `InvalidOperationException` ("The expression '…' cannot be
+  evaluated on the client: …") with the original exception as inner exception.
 - Arithmetic / method-call expressions are translated to SQL by EF Core.
 
 ### Complex types (since 10.6.0)
@@ -130,9 +142,9 @@ await ctx.Set<Message>().BulkInsertAsync(
 
 - A whole complex property expands into one column per member, recursively for
   nested complex types.
-- The value of a whole complex property is the source complex property or a
-  captured variable. A `new` expression is not evaluated on the client; assign it
-  to a variable first.
+- The value of a whole complex property is the source complex property, a
+  captured variable or a `new` expression without a lambda parameter (e.g.
+  `new BoundaryValueObject(7, 8)`), which is evaluated once on the client.
 - Members with a value converter work; a captured value is converted with the
   converter of the target column.
 - A whole complex property skips members whose value the database generates
@@ -165,9 +177,10 @@ await ctx.Set<Message>().BulkInsertAsync(
   - captured `null` as the value of a whole complex property, or any member access
     on a captured `null`: "The member '…' of '…' cannot be read because the
     captured value is null."; pass a non-null value or map the members one by one.
-    Captured values are evaluated member by member, so `captured.HasValue` on a
-    `null` `int?` and `captured == null ? 0 : captured.Count` throw as well; check
-    for `null` before the call.
+    `n.Value` on a `null` `int?` throws it as well. A null guard prevents it
+    (`captured == null ? 0 : captured.Count`, `nullableInt.HasValue ? 1 : 2`),
+    also when a branch reads a column
+    (`captured == null ? f.Count : captured.Count + f.Count`).
   - same target column mapped twice, also a whole complex property plus one of its
     members ("The target column '…' is mapped more than once."), on all providers.
 - Nested complex types need settable or `init` members, because EF Core cannot
